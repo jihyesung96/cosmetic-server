@@ -1,30 +1,85 @@
-//node는 Common JS를 사용함
-//불러올때 require를 사용
-const http = require('http');
-const { type } = require('os');
-//본인 컴퓨터 주소를 의미함!!
-const hostname = '127.0.0.1';
+//express서버 만들기
+const express = require("express");
+const cors =require("cors");
+
+//mysql부르기
+const mysql = require("mysql");
+
+//서버 생성 ----> express()호출
+const app = express();
+
+//프로세스의 주소 포트번호 지정
 const port = 8080;
-//createServer() ---> 서버생성
-//요펑정보 req, 응답정보 res
-const server = http.createServer(function(req,res){
-    const path = req.url;
-    const method = req.method;
-    if(path==="/products"){
-        //응답을 보낼때 json객체를 보낼거야
-        res.writeHead(200,{'content-type':'application/json'})
-        //객체를 json으로 반환 JSON.stringify(obj)
-        const product = JSON.stringify({
-            name : "기초화장품",
-            price : 50000
-        })
-        res.end(product);
-    }
-    else{
-        res.end("빨리 수업 마치고 싶다");
+
+const multer  = require('multer')
+
+//서버의 upload를 클라이언트 접근가능하도록 설정  
+app.use("/upload", express.static("upload")); 
+
+//json형식의 데이터를 처리할수 있도록 설정
+app.use(express.json());
+
+//브라우저의 CORS이슈를 막기 위해 사용되는 코드
+app.use(cors()); 
+
+//diskStorage() ---> 파일을 저장할때의 모든 제어 기능을 제공
+const storage = multer.diskStorage({
+    destination :(req, file, cb) =>{
+        cb(null, 'upload/');
+    },
+    filename : (req, file, cb)=>{
+        const newFilename = file.originalname;
+        cb(null, newFilename);
     }
 })
+const upload = multer({storage:storage}); 
+app.post('/upload',upload.single('file'),(req,res)=>{
+    res.send({
+        imageUrl: req.file.filename
+    })
+});
 
-//listen 은 대기 호스트네임과 포트번호 요청을 기다림
-server.listen(port,hostname);
-console.log("화장품 서버가 동작 중입니다.");
+//연결선 만들기
+const conn = mysql.createConnection({
+    host : "localhost",
+    user : "root",
+    password : "1234",
+    port:"3306",
+    database : "shopping"
+})
+
+//연결하기
+conn.connect();
+
+
+//get요청시 응답 app.get(경로, 콜백함수)
+app.get('/products',(req, res)=>{
+    conn.query('select * from products', function(error, result, fields){
+        res.send(result);
+    })
+     //node서버는 end이고 express는 send로 응답
+})
+app.get('/products/:id',(req,res) =>{
+    const params = req.params;
+    const {id} = params;
+    conn.query(`select * from products where p_id=${id}`, function(error, result, fields){
+        res.send(result);
+    })
+})
+
+//addProduct post요청이 오면 처리
+//req => 요청하는 객체 res => 응답하는 객체  restAPI?????? 이게 뭘까?
+app.post("/addProduct",async(req,res) =>{
+    const { p_name, p_price , p_desc, p_img, p_quantity} =req.body;
+    conn.query("insert into products(p_name, p_price , p_desc, p_img, p_quantity) values(?,?,?,?,?)",
+    [p_name, p_price , p_desc, p_img, p_quantity],
+    (err, result, fields)=>{
+        res.send("ok");
+    }
+    )
+})
+// 
+//서버를 구동
+app.listen(port,()=>{
+    console.log("서버가 돌아가고 있습니다.");
+})
